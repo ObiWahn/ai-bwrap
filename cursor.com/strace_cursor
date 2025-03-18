@@ -1,0 +1,42 @@
+#!/bin/bash
+
+strace -f cursor 2>&1 \
+    | rg -i 'openat\(AT_FDCWD, "/' \
+    | grep -v /proc \
+    | grep -v '/cursor/' \
+    | grep -v "$HOME/.cursor" \
+    | grep -v "$HOME/.config/Cursor" \
+    | grep -v "$HOME/.local" \
+    | grep -v "$HOME/.config" \
+    | grep -v "$HOME/.dri" \
+    | grep -v "$HOME/.cache" \
+    | grep -v "$HOME/.fontconfig" \
+    | grep -v "$HOME/nobackup" \
+    | grep -v "/dev/null" \
+    | grep -v "/dev/shm" \
+    | grep -v "/dev" \
+    | grep -v "/sys" \
+    | grep -v "/lib" \
+    | grep -v "/lib64" \
+    | grep -v "/usr/share/fonts" \
+    | grep -v "/usr/share/fontconfig" \
+    | grep -v "/usr/share/zoneinfo" \
+    | grep -v "/usr/share/locale" \
+    | grep -v "/usr/share/vulkan" \
+    | grep -v "/usr/share/gnome" \
+    | grep -v "/usr/share/dri" \
+    | grep -v "/etc/ld.so.cache" \
+    | grep -v "/etc/localtime" \
+    | grep -v "/etc/fonts" \
+    | grep -v "/etc/os-release" \
+    | grep -v "/etc/drirc" \
+    | grep -v "/etc/profile" \
+    | grep -v "/etc/nsswitch.conf" \
+    | grep -v "/etc/vulkan" \
+    | grep -v "/etc/xdg" \
+    | grep -v "/etc/resolv.conf" \
+    | grep -v "/etc/svc.conf" \
+    | grep -v "/etc/netsvc.conf" \
+    | grep -v "/etc/bash_completion" \
+    | grep -v "/etc/bash_completion.d" \
+    | grep -v "/etc/shells"

@@ -6,6 +6,47 @@ CURSOR_REPOS=${CURSOR_REPOS:-"$HOME/repos/"}
 CURSOR_EXTRA_BINDS=${CURSOR_EXTRA_BINDS:-""}
 CURSOR_EXTRA_RO_BINDS=${CURSOR_EXTRA_RO_BINDS:-""}
 
+filter=false
+
+debug_filter=true
+dbus_system_bus_socket="/run/dbus/system_bus_socket"
+dbus_socket_for_cursor="/run/dbus/system_bus_socket"
+
+
+if [[ ${1:-""} == "--dbus-filter" ]]; then
+    shift
+    filter=true
+    dbus_socket_for_cursor="/run/user/${UID}/system_bus_socket-cusor-filtered"
+fi
+
+if $filter; then
+    echo "setting up dbus proxy"
+    set -x
+    if $debug_filter; then
+        echo "logging enabled"
+        xdg-dbus-proxy "unix:path=$dbus_system_bus_socket" "$dbus_socket_for_cursor" --log &> dbus-cursor.log &
+    else
+        xdg-dbus-proxy "unix:path=$dbus_system_bus_socket" "$dbus_socket_for_cursor" &
+        echo
+    fi
+    set +x
+
+    pid=$!
+    sleep 1
+
+    if ! [[ -e "$dbus_socket_for_cursor" ]]; then
+        echo "socket: $dbus_socket_for_cursor could not be created"
+        exit 1
+    fi
+
+    # Set up trap to clean up on exit
+    cleanup() {
+        echo "Stopping xdg-dbus-proxy..."
+        kill $pid
+        #rm "$dbus_socket_for_cursor"
+    }
+    trap cleanup EXIT INT SIGINT SIGTERM
+fi
 
 IFS=':' read -ra parts <<< "$CURSOR_REPOS"
 repos=()
@@ -25,32 +66,61 @@ for part in "${parts[@]}"; do
     extra_ro_binds+=( --ro-bind "$part" "$part")
 done
 
-bwrap --share-net \
-      --unshare-pid \
-      --new-session \
-      --dev /dev \
-      --tmpfs /tmp \
-      --proc /proc \
-      \
-      --bind /run/user/$UID /run/user/$UID \
-      --bind /run/dbus/system_bus_socket /run/dbus/system_bus_socket \
-      \
-      --ro-bind /bin /bin \
-      --ro-bind /usr /usr \
-      --ro-bind /lib /lib \
-      --ro-bind /lib64 /lib64 \
-      --ro-bind /etc /etc \
-      \
-      --tmpfs /etc/.git \
-      --ro-bind /dev/null /etc/passwd \
-      --ro-bind /dev/null /etc/group \
-      --ro-bind /dev/null /etc/shadow \
-      \
-      --bind "$CURSOR_APP_DIR/squashfs-root" /cursor \
-      --bind $HOME/.config/Cursor $HOME/.config/Cursor \
-      --bind $HOME/.cursor $HOME/.cursor \
-      "${repos[@]}" \
-      "${extra_binds[@]}" \
-      -- \
-      /cursor/AppRun
-      "$@"
+
+command=( bwrap )
+command+=(
+    --share-net
+    --unshare-pid
+    --new-session
+    --die-with-parent
+    --dev /dev
+    --tmpfs /tmp
+    --proc /proc
+)
+
+# adding run
+command+=(
+    #--bind /run/user/$UID /run/user/$UID
+    #--bind /run/user/$UID/bus /run/user/$UID/bus
+    --tmpfs /run/user/$UID
+    --bind "$dbus_socket_for_cursor" "$dbus_system_bus_socket"
+
+    --bind /dev/dri /dev/dri
+)
+
+# add bin lib usr
+command+=(
+    --ro-bind /bin /bin
+    --ro-bind /usr /usr
+    --ro-bind /lib /lib
+    --ro-bind /lib64 /lib64
+)
+
+# add required files in etc
+command+=(
+    #--ro-bind /etc /etc
+    --tmpfs /etc
+    --ro-bind /etc/resolv.conf /etc/resolv.conf
+    --ro-bind /etc/ld.so.conf /etc/ld.so.conf
+    --ro-bind /etc/ld.so.conf.d /etc/ld.so.conf.d
+    --ro-bind /etc/localtime /etc/localtime
+    --ro-bind /etc/bash.bashrc /etc/bash.bashrc
+    --ro-bind /etc/fonts/ /etc/fonts
+    --ro-bind /etc/profile /etc/profile
+    --ro-bind /etc/bash_completion /etc/bash_completion
+    --ro-bind /etc/bash_completion.d /etc/bash_completion.d
+)
+
+# add bin lib usr
+command+=(
+    --bind "$CURSOR_APP_DIR/squashfs-root" /cursor
+    --bind $HOME/.config/Cursor $HOME/.config/Cursor
+    --bind $HOME/.cursor $HOME/.cursor
+    "${repos[@]}"
+    "${extra_binds[@]}"
+)
+
+command+=( -- /cursor/AppRun "$@" )
+
+echo "command: ${command[@]}"
+"${command[@]}"
