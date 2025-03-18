@@ -6,6 +6,44 @@ CURSOR_REPOS=${CURSOR_REPOS:-"$HOME/repos/"}
 CURSOR_EXTRA_BINDS=${CURSOR_EXTRA_BINDS:-""}
 CURSOR_EXTRA_RO_BINDS=${CURSOR_EXTRA_RO_BINDS:-""}
 
+filter=false
+
+debug_filter=true
+dbus_system_bus_socket="/run/dbus/system_bus_socket"
+dbus_socket_for_cursor="/run/dbus/system_bus_socket"
+
+
+if [[ ${1:-""} == "--dbus-filter" ]]; then
+    shift
+    filter=true
+    dbus_socket_for_cursor="/run/user/${UID}/system_bus_socket-cusor-filtered"
+fi
+
+if $filter; then
+    echo "setting up dbus proxy"
+    if $debug_filter; then
+        echo "logging enabled"
+        xdg-dbus-proxy "unix:path=$dbus_system_bus_socket" "$dbus_socket_for_cursor" --log > dbus-cursor.log &
+    else
+        xdg-dbus-proxy "unix:path=$dbus_system_bus_socket" "$dbus_socket_for_cursor" &
+    fi
+
+    pid=$!
+    sleep 1
+
+    if ! [[ -e "$dbus_socket_for_cursor" ]]; then
+        echo "socket: $dbus_socket_for_cursor could not be created"
+        exit 1
+    fi
+
+    # Set up trap to clean up on exit
+    cleanup() {
+        echo "Stopping xdg-dbus-proxy..."
+        kill $pid
+        rm "$dbus_socket_for_cursor"
+    }
+    trap cleanup EXIT
+fi
 
 IFS=':' read -ra parts <<< "$CURSOR_REPOS"
 repos=()
@@ -33,7 +71,7 @@ bwrap --share-net \
       --proc /proc \
       \
       --bind /run/user/$UID /run/user/$UID \
-      --bind /run/dbus/system_bus_socket /run/dbus/system_bus_socket \
+      --bind "$dbus_socket_for_cursor" "$dbus_system_bus_socket" \
       \
       --ro-bind /bin /bin \
       --ro-bind /usr /usr \
