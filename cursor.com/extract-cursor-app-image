@@ -1,0 +1,11 @@
+#!/usr/bin/bash
+
+new_root="squashfs-root-$1"
+
+rm squashfs-root
+
+chmod 755  "$1"
+"./$1" --appimage-extract
+
+mv squashfs-root "$new_root"
+ln -s "$new_root" squashfs-root

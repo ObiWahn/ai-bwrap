@@ -1,0 +1,56 @@
+#!/usr/bin/env bash
+
+CURSOR_APP_DIR=${CURSOR_APP_DIR:-"$HOME/apps/"}
+#List separated by colons
+CURSOR_REPOS=${CURSOR_REPOS:-"$HOME/repos/"}
+CURSOR_EXTRA_BINDS=${CURSOR_EXTRA_BINDS:-""}
+CURSOR_EXTRA_RO_BINDS=${CURSOR_EXTRA_RO_BINDS:-""}
+
+
+IFS=':' read -ra parts <<< "$CURSOR_REPOS"
+repos=()
+for part in "${parts[@]}"; do
+    repos+=( --bind "$part" "$part")
+done
+
+IFS=':' read -ra parts <<< "$CURSOR_EXTRA_BINDS"
+extra_binds=()
+for part in "${parts[@]}"; do
+    extra_binds+=( --bind "$part" "$part")
+done
+
+IFS=':' read -ra parts <<< "$CURSOR_EXTRA_RO_BINDS"
+extra_ro_binds=()
+for part in "${parts[@]}"; do
+    extra_ro_binds+=( --ro-bind "$part" "$part")
+done
+
+bwrap --share-net \
+      --unshare-pid \
+      --new-session \
+      --dev /dev \
+      --tmpfs /tmp \
+      --proc /proc \
+      \
+      --bind /run/user/$UID /run/user/$UID \
+      --bind /run/dbus/system_bus_socket /run/dbus/system_bus_socket \
+      \
+      --ro-bind /bin /bin \
+      --ro-bind /usr /usr \
+      --ro-bind /lib /lib \
+      --ro-bind /lib64 /lib64 \
+      --ro-bind /etc /etc \
+      \
+      --tmpfs /etc/.git \
+      --ro-bind /dev/null /etc/passwd \
+      --ro-bind /dev/null /etc/group \
+      --ro-bind /dev/null /etc/shadow \
+      \
+      --bind "$CURSOR_APP_DIR/squashfs-root" /cursor \
+      --bind $HOME/.config/Cursor $HOME/.config/Cursor \
+      --bind $HOME/.cursor $HOME/.cursor \
+      "${repos[@]}" \
+      "${extra_binds[@]}" \
+      -- \
+      /cursor/AppRun
+      "$@"
